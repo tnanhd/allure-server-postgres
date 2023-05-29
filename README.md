@@ -34,5 +34,4 @@ curl --location 'http://localhost:8080/api/result/cef55ac7-6095-4470-9cf4-d057a2
 ```
 
 ## Entities model
-![Alt text](./allure.drawio.svg)
-<img src="./allure.drawio.svg">
+![null](./allure.drawio.svg)
