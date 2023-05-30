@@ -12,8 +12,11 @@ public class ContainerMapper {
     public static Container fromDto(ContainerDto containerDto) {
         Container container = Container.builder()
                 .name(containerDto.getName())
+                .befores(containerDto.getBefores())
+                .afters(containerDto.getAfters())
                 .start(containerDto.getStart())
                 .stop(containerDto.getStop())
+                .isVirtual(false)
                 .build();
         container.setUuid(UUID.fromString(containerDto.getUuid()));
         return container;
@@ -27,8 +30,8 @@ public class ContainerMapper {
                         .stream()
                         .map(Result::getUuidString)
                         .collect(Collectors.toList()))
-                .befores(new ArrayList<>())
-                .afters(new ArrayList<>())
+                .befores(container.getBefores() == null ? new ArrayList<>() : container.getBefores())
+                .afters(container.getAfters() == null ? new ArrayList<>() : container.getAfters())
                 .start(container.getStart())
                 .stop(container.getStop())
                 .build();

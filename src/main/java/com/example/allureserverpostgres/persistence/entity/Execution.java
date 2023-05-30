@@ -29,6 +29,11 @@ public class Execution extends EntityWithUUID {
     private String projectPath;
     private String projectVersion;
 
+    /**
+     * Virtual execution should not be generated to json file
+     */
+    private Boolean isVirtual;
+
     @CreatedDate
     private LocalDateTime createdDate;
 
@@ -36,4 +41,9 @@ public class Execution extends EntityWithUUID {
     @JsonIgnore
     @OneToMany(mappedBy = "execution")
     private Set<Container> containers;
+
+    @ToString.Exclude
+    @JsonIgnore
+    @OneToMany(mappedBy = "execution")
+    private Set<FileAttachment> fileAttachments;
 }

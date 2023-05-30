@@ -18,13 +18,13 @@ public class ResultDto {
     private String testCaseName;
     private String fullName;
     private List<Label> labels;
-    private List<String> links;
+    private List<Link> links;
     private String name;
     private String status;
     private String stage;
     private String description;
-    private List<String> steps;
-    private List<String> attachments;
+    private List<Step> steps;
+    private List<Attachment> attachments;
     private List<String> parameters;
     private Long start;
     private Long stop;
@@ -33,5 +33,31 @@ public class ResultDto {
     public static class Label {
         private String name;
         private String value;
+    }
+
+    @Data
+    public static class Step {
+        private String name;
+        private String status;
+        private String stage;
+        private List<Step> steps;
+        private List<Attachment> attachments;
+        private List<String> parameters;
+        private Long start;
+        private Long stop;
+    }
+
+    @Data
+    public static class Attachment {
+        private String name;
+        private String source;
+        private String type;
+    }
+
+    @Data
+    public static class Link {
+        private String name;
+        private String url;
+        private String type;
     }
 }

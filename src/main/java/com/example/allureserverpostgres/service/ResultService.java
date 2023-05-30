@@ -8,9 +8,11 @@ import com.example.allureserverpostgres.dto.ResultDto;
 import com.example.allureserverpostgres.dto.mapper.ResultMapper;
 import com.example.allureserverpostgres.persistence.entity.Container;
 import com.example.allureserverpostgres.persistence.entity.Execution;
+import com.example.allureserverpostgres.persistence.entity.FileAttachment;
 import com.example.allureserverpostgres.persistence.entity.Result;
 import com.example.allureserverpostgres.persistence.repository.ContainerRepository;
 import com.example.allureserverpostgres.persistence.repository.ExecutionRepository;
+import com.example.allureserverpostgres.persistence.repository.FileAttachmentRepository;
 import com.example.allureserverpostgres.persistence.repository.ResultRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
@@ -44,11 +46,13 @@ public class ResultService {
     private final Path storagePath;
     private final ExecutionRepository executionRepository;
     private final ContainerRepository containerRepository;
+    private final FileAttachmentRepository fileAttachmentRepository;
     private final ResultRepository resultRepository;
 
-    public ResultService(ExecutionRepository executionRepository, ContainerRepository containerRepository, ResultRepository resultRepository) {
+    public ResultService(ExecutionRepository executionRepository, ContainerRepository containerRepository, FileAttachmentRepository fileAttachmentRepository, ResultRepository resultRepository) {
         this.executionRepository = executionRepository;
         this.containerRepository = containerRepository;
+        this.fileAttachmentRepository = fileAttachmentRepository;
         this.resultRepository = resultRepository;
         this.storagePath = Paths.get("allure/results/");
     }
@@ -83,9 +87,10 @@ public class ResultService {
 
             List<ContainerDto> containerDtos = new ArrayList<>();
             Map<String, Result> allResults = new HashMap<>();
-            final ExecutionDto[] executionDto = new ExecutionDto[1];
-            Path finalTmpResultDirectory = tmpResultDirectory;
+            List<FileAttachment> allAttachments = new ArrayList<>();
+            var executionDtos = new ExecutionDto[1];
 
+            Path finalTmpResultDirectory = tmpResultDirectory;
             names.forEach(name -> {
                 try {
                     assert zipFileName != null;
@@ -99,17 +104,35 @@ public class ResultService {
                         allResults.put(dto.getUuid(), ResultMapper.fromDto(dto));
                     } else if (name.contains("executor")) {
                         File file = finalTmpResultDirectory.resolve(zipFileName).resolve(name).toFile();
-                        executionDto[0] = mapper.readValue(file, ExecutionDto.class);
-                        executionDto[0].setUuid(uuid);
-                        executionDto[0].setOriginalFileName(allureResults.getOriginalFilename());
+                        executionDtos[0] = mapper.readValue(file, ExecutionDto.class);
+                        executionDtos[0].setOriginalFileName(allureResults.getOriginalFilename());
+                    } else if (name.contains("attachment")) {
+                        var fileData = Files.readAllBytes(finalTmpResultDirectory.resolve(zipFileName).resolve(name));
+                        var attachment = new FileAttachment(name, fileData);
+                        allAttachments.add(attachment);
                     }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
             });
 
-            Execution execution = ExecutionMapper.fromDto(executionDto[0]);
+            ExecutionDto executionDto = executionDtos[0];
+            Execution execution = null;
+            if (executionDto != null) {
+                execution = ExecutionMapper.fromDto(executionDto);
+            }
+            if (execution == null) {
+                execution = new Execution();
+                execution.setIsVirtual(true);
+                execution.setOriginalFileName(allureResults.getOriginalFilename());
+            }
+            execution.setUuid(UUID.fromString(uuid));
             executionRepository.save(execution);
+
+            for (var attachment : allAttachments) {
+                attachment.setExecution(execution);
+            }
+            fileAttachmentRepository.saveAll(allAttachments);
 
             List<Container> containers = new ArrayList<>();
             for (var containerDto : containerDtos) {
@@ -126,6 +149,15 @@ public class ResultService {
                         });
 
             }
+            if (containers.isEmpty()) {
+                Container container = new Container();
+                container.setUuid(UUID.randomUUID());
+                container.setResults(new HashSet<>(allResults.values()));
+                container.setIsVirtual(true);
+                container.setExecution(execution);
+                containers.add(container);
+            }
+
             resultRepository.saveAll(allResults.values());
             containerRepository.saveAll(containers);
         } catch (Exception ex) { //NOPMD
@@ -207,17 +239,27 @@ public class ResultService {
         Files.createDirectories(folderPath);
         ObjectMapper mapper = new ObjectMapper();
 
-        // Execution
-        ExecutionDto executionDto = ExecutionMapper.toDto(execution);
-        mapper.writeValue(folderPath.resolve("executor.json").toFile(), executionDto);
+        if (execution.getIsVirtual().equals(false)) {
+            ExecutionDto executionDto = ExecutionMapper.toDto(execution);
+            mapper.writeValue(folderPath.resolve("executor.json").toFile(), executionDto);
+        }
+
+        var attachments = execution.getFileAttachments();
+        for (var attachment : attachments) {
+            var fileData = attachment.getFileData();
+            var path = folderPath.resolve(attachment.getFileName());
+            Files.write(path, fileData);
+        }
 
         Set<Container> containers = execution.getContainers();
         for (var container : containers) {
-            ContainerDto containerDto = ContainerMapper.toDto(container);
-            mapper.writeValue(folderPath
-                            .resolve(container.getUuidString() + "-container.json")
-                            .toFile(),
-                    containerDto);
+            if (container.getIsVirtual().equals(false)) {
+                ContainerDto containerDto = ContainerMapper.toDto(container);
+                mapper.writeValue(folderPath
+                                .resolve(container.getUuidString() + "-container.json")
+                                .toFile(),
+                        containerDto);
+            }
 
             var results = container.getResults();
             for (var result : results) {
